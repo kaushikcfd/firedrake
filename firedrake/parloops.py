@@ -9,6 +9,7 @@ from ufl.domain import join_domains
 from pyop2 import READ, WRITE, RW, INC, MIN, MAX
 import pyop2
 import loopy
+import coffee.base as ast
 
 from firedrake import constant
 
@@ -61,7 +62,7 @@ _maps = {
 r"""Map a measure to the correct maps."""
 
 
-def _form_kernel(kernel_domains, instructions, measure, args, **kwargs):
+def _form_loopy_kernel(kernel_domains, instructions, measure, args, **kwargs):
 
     kargs = []
 
@@ -107,15 +108,50 @@ def _form_kernel(kernel_domains, instructions, measure, args, **kwargs):
     return pyop2.Kernel(knl, "par_loop_kernel", **kwargs)
 
 
-def par_loop(kernel_domains, instructions, measure, args, kernel_kwargs=None, **kwargs):
+def _form_string_kernel(body, measure, args, **kwargs):
+    kargs = []
+    for var, (func, intent) in args.items():
+        if isinstance(func, constant.Constant):
+            if intent is not READ:
+                raise RuntimeError("Only READ access is allowed to Constant")
+            # Constants modelled as Globals, so no need for double
+            # indirection
+            ndof = func.dat.cdim
+            kargs.append(ast.Decl("double", ast.Symbol(var, (ndof, )),
+                                  qualifiers=["const"]))
+        else:
+            # Do we have a component of a mixed function?
+            if isinstance(func, Indexed):
+                c, i = func.ufl_operands
+                idx = i._indices[0]._value
+                ndof = c.function_space()[idx].finat_element.space_dimension()
+            else:
+                if len(func.function_space()) > 1:
+                    raise NotImplementedError("Must index mixed function in par_loop.")
+                ndof = func.function_space().finat_element.space_dimension()
+            if measure.integral_type() == 'interior_facet':
+                ndof *= 2
+            kargs.append(ast.Decl("double", ast.Symbol(var, (ndof, ))))
+        body = body.replace(var+".dofs", str(ndof))
+
+    return pyop2.Kernel(ast.FunDecl("void", "par_loop_kernel", kargs,
+                                    ast.FlatBlock(body),
+                                    pred=["static"]),
+                        "par_loop_kernel", **kwargs)
+
+
+def par_loop(kernel, measure, args, kernel_kwargs=None, is_loopy_kernel=False, **kwargs):
     r"""A :func:`par_loop` is a user-defined operation which reads and
     writes :class:`.Function`\s by looping over the mesh cells or facets
     and accessing the degrees of freedom on adjacent entities.
 
-    :arg kernel_domains: the iteration domain for the kernel, in Integer Set
-        Libarary (ISL) syntax. function_name.dofs can be used as a magic word.
-    :arg instructions: is a string containing the instruction for the kernel
-        in loo.py syntax.
+    :arg kernel: a string containing the C code to be executed. Or a
+        2-tuple of (domains, instructions) to create a loopy kernel
+        (must also set ``is_loopy_kernel=True``). If loopy syntax is
+        used, the domains and instructions should be specified in
+        loopy kernel syntax. See the `loopy tutorial
+        <https://documen.tician.de/loopy/tutorial.html>`_ for details.
+
     :arg measure: is a UFL :class:`~ufl.measure.Measure` which determines the
         manner in which the iteration over the mesh is to occur.
         Alternatively, you can pass :data:`direct` to designate a direct loop.
@@ -146,13 +182,18 @@ def par_loop(kernel_domains, instructions, measure, args, kernel_kwargs=None, **
     that DoF::
 
       A.assign(numpy.finfo(0.).min)
+      par_loop('for (int i=0; i<A.dofs; i++) A[i][0] = fmax(A[i][0], B[0][0]);', dx,
+          {'A' : (A, RW), 'B': (B, READ)})
+
+    The equivalent using loopy kernel syntax is::
+
       domain = '{[i]: 0 <= i < A.dofs}'
       instructions = '''
       for i
-          A[i] = fmax(A[i], B[0])
+          A[i] = max(A[i], B[0])
       end
       '''
-      par_loop(domain, instructions, dx, {'A' : (A, RW), 'B': (B, READ)})
+      par_loop((domain, instructions), dx, {'A' : (A, RW), 'B': (B, READ)}, is_loopy_kernel=True)
 
 
     **Argument definitions**
@@ -240,7 +281,6 @@ def par_loop(kernel_domains, instructions, measure, args, kernel_kwargs=None, **
     indirect and direct :func:`par_loop` calls.
 
     """
-
     if kernel_kwargs is None:
         kernel_kwargs = {}
 
@@ -280,7 +320,11 @@ def par_loop(kernel_domains, instructions, measure, args, kernel_kwargs=None, **
         domain, = domains
         mesh = domain
 
-    op2args = [_form_kernel(kernel_domains, instructions, measure, args, **kernel_kwargs)]
+    if is_loopy_kernel:
+        kernel_domains, instructions = kernel
+        op2args = [_form_loopy_kernel(kernel_domains, instructions, measure, args, **kernel_kwargs)]
+    else:
+        op2args = [_form_string_kernel(kernel, measure, args, **kernel_kwargs)]
 
     op2args.append(_map['itspace'](mesh, measure))
 
