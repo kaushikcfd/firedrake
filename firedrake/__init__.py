@@ -11,6 +11,10 @@ elif "PETSC_DIR" not in os.environ and config["options"]["honour_petsc_dir"]:
 del os, sys, config
 
 # Ensure petsc is initialised by us before anything else gets in there.
+import pytools
+pytools.ProcessLogger.__init__ = lambda *args, **kwargs: None
+pytools.ProcessLogger.done = lambda *args, **kwargs: None
+
 import firedrake.petsc as petsc
 del petsc
 
