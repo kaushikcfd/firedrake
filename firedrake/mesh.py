@@ -352,7 +352,7 @@ class MeshTopology(object):
         :arg distribution_parameters: options controlling mesh
             distribution, see :func:`Mesh` for details.
         """
-        # Do some validation of the input mesh
+        # Do some validation of the input mes = sdata.old_to_new_ordering
         distribute = distribution_parameters.get("partition")
         self._distribution_parameters = distribution_parameters.copy()
         if distribute is None:
@@ -432,6 +432,7 @@ class MeshTopology(object):
 
         def callback(self):
             """Finish initialisation."""
+            print("Hey, I am doing some RCM shit")
             del self._callback
             if self.comm.size > 1:
                 add_overlap()
@@ -632,15 +633,58 @@ class MeshTopology(object):
         """
         return tuple(np.dot(nodes_per_entity, self._entity_classes))
 
-    def make_cell_node_list(self, global_numbering, entity_dofs, offsets):
+    def make_cell_node_list(self, global_numbering, entity_dofs, offsets, should_reorder=True):
         """Builds the DoF mapping.
 
         :arg global_numbering: Section describing the global DoF numbering
         :arg entity_dofs: FInAT element entity DoFs
         :arg offsets: layer offsets for each entity dof (may be None).
         """
-        return dmplex.get_cell_nodes(self, global_numbering,
+
+        old_ordering = dmplex.get_cell_nodes(self, global_numbering,
                                      entity_dofs, offsets)
+        if False:
+            print('Warning, I am not rearranging')
+            if not should_reorder:
+                old_to_new_np_array = np.arange(np.max(old_ordering)+1, dtype=old_ordering.dtype)
+                
+                return old_ordering, old_to_new_np_array
+            return old_ordering
+
+        print('Yay, I am reordering')
+
+        new_ordering = np.empty_like(old_ordering)
+        ncells, ndofs = old_ordering.shape
+
+        # FIXME: Generalize this.
+        batch_size = 32
+        assert ncells % batch_size == 0
+        nbatches = ncells // batch_size
+
+        old_to_new = {}
+        counter = 0
+
+        for ibatch in range(nbatches):
+            cell_start, cell_end = ibatch * batch_size, (ibatch+1) * batch_size
+            for idof in range(ndofs):
+                for icell in range(cell_start, cell_end):
+                    old_idx = old_ordering[icell, idof]
+                    if old_idx in old_to_new:
+                        new_ordering[icell, idof] = old_to_new[old_idx]
+                    else:
+                        new_ordering[icell, idof] = counter
+                        old_to_new[old_idx] = counter
+                        counter += 1
+
+        new_ordering = new_ordering.T
+        print(new_ordering)
+
+        if not should_reorder:
+            old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
+            print('Coords max while ordernig', np.max(new_ordering))
+            return new_ordering, old_to_new_np_array
+        print('Basis max while ordering', np.max(new_ordering))
+        return new_ordering
 
     def make_dofs_per_plex_entity(self, entity_dofs):
         """Returns the number of DoFs per plex entity for each stratum,
@@ -1017,6 +1061,7 @@ class MeshGeometry(ufl.Mesh):
         import firedrake.functionspaceimpl as functionspaceimpl
         import firedrake.function as function
         self.init()
+        print('I am computing coordinates here')
 
         coordinates_fs = self._coordinates.function_space()
         V = functionspaceimpl.WithGeometry(coordinates_fs, self)
@@ -1356,9 +1401,9 @@ def Mesh(meshfile, **kwargs):
         self.topology.init()
 
         coordinates_fs = functionspace.VectorFunctionSpace(self.topology, "Lagrange", 1,
-                                                           dim=geometric_dim)
-
+                                                           dim=geometric_dim, should_reorder=False)
         coordinates_data = dmplex.reordered_coords(plex, coordinates_fs.dm.getDefaultSection(),
+                                                   coordinates_fs._shared_data.old_to_new_ordering,
                                                    (self.num_vertices(), geometric_dim))
 
         coordinates = function.CoordinatelessFunction(coordinates_fs,
@@ -1397,6 +1442,7 @@ def ExtrudedMesh(mesh, layers, layer_height=None, extrusion_type='uniform', kern
     :arg gdim:           number of spatial dimensions of the
                          resulting mesh (this is only used if a
                          custom kernel is provided)
+
 
     The various values of ``extrusion_type`` have the following meanings:
 
