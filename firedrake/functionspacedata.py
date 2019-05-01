@@ -421,7 +421,6 @@ class FunctionSpaceData(object):
         self.map_caches = get_map_caches(mesh, (edofs_key, real_tensorproduct))
         self.offset = get_dof_offset(mesh, (edofs_key, real_tensorproduct), entity_dofs, finat_element.space_dimension())
         if not should_reorder:
-            print('Yep, I am setting self.old_to_new_ordering')
             self.entity_node_lists, self.old_to_new_ordering = get_entity_node_lists(mesh, (edofs_key, real_tensorproduct), entity_dofs, global_numbering, self.offset, should_reorder)
         else:
             self.entity_node_lists = get_entity_node_lists(mesh, (edofs_key, real_tensorproduct), entity_dofs, global_numbering, self.offset, should_reorder)
@@ -480,7 +479,11 @@ class FunctionSpaceData(object):
         :arg parent: The parent map (used when bcs are provided)."""
         # V is only really used for error checking and "name".
         assert len(V) == 1, "get_map should not be called on MixedFunctionSpace"
-        entity_node_list = self.entity_node_lists[entity_set]
+
+        if isinstance(self.entity_node_lists, tuple):
+            entity_node_list = self.entity_node_lists[0][entity_set]
+        else:
+            entity_node_list = self.entity_node_lists[entity_set]
 
         if bcs is not None:
             for bc in bcs:

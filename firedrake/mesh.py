@@ -432,7 +432,6 @@ class MeshTopology(object):
 
         def callback(self):
             """Finish initialisation."""
-            print("Hey, I am doing some RCM shit")
             del self._callback
             if self.comm.size > 1:
                 add_overlap()
@@ -644,14 +643,11 @@ class MeshTopology(object):
         old_ordering = dmplex.get_cell_nodes(self, global_numbering,
                                      entity_dofs, offsets)
         if False:
-            print('Warning, I am not rearranging')
             if not should_reorder:
                 old_to_new_np_array = np.arange(np.max(old_ordering)+1, dtype=old_ordering.dtype)
                 
                 return old_ordering, old_to_new_np_array
             return old_ordering
-
-        print('Yay, I am reordering')
 
         new_ordering = np.empty_like(old_ordering)
         ncells, ndofs = old_ordering.shape
@@ -677,13 +673,10 @@ class MeshTopology(object):
                         counter += 1
 
         new_ordering = new_ordering.T
-        print(new_ordering)
 
         if not should_reorder:
             old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
-            print('Coords max while ordernig', np.max(new_ordering))
             return new_ordering, old_to_new_np_array
-        print('Basis max while ordering', np.max(new_ordering))
         return new_ordering
 
     def make_dofs_per_plex_entity(self, entity_dofs):
@@ -1061,7 +1054,6 @@ class MeshGeometry(ufl.Mesh):
         import firedrake.functionspaceimpl as functionspaceimpl
         import firedrake.function as function
         self.init()
-        print('I am computing coordinates here')
 
         coordinates_fs = self._coordinates.function_space()
         V = functionspaceimpl.WithGeometry(coordinates_fs, self)
