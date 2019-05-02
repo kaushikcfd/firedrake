@@ -642,23 +642,24 @@ class MeshTopology(object):
 
         old_ordering = dmplex.get_cell_nodes(self, global_numbering,
                                      entity_dofs, offsets)
-        if False:
-            if not should_reorder:
-                old_to_new_np_array = np.arange(np.max(old_ordering)+1, dtype=old_ordering.dtype)
-                
-                return old_ordering, old_to_new_np_array
-            return old_ordering
+
+        print("CAUTION: Not doing any fata layout transformations.")
+        return old_ordering
 
         new_ordering = np.empty_like(old_ordering)
         ncells, ndofs = old_ordering.shape
 
         # FIXME: Generalize this.
-        batch_size = 32
+        # But how?
+        batch_size = 4
         assert ncells % batch_size == 0
         nbatches = ncells // batch_size
 
         old_to_new = {}
         counter = 0
+
+        STRATEGY = 'SCPT'
+        print("CAUTION: Data layout adjusted for %s" % STRATEGY)
 
         for ibatch in range(nbatches):
             cell_start, cell_end = ibatch * batch_size, (ibatch+1) * batch_size
@@ -675,9 +676,23 @@ class MeshTopology(object):
         new_ordering = new_ordering.T
 
         if not should_reorder:
-            old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
-            return new_ordering, old_to_new_np_array
-        return new_ordering
+            # Coordinate mapping
+            if STRATEGY == 'SCPT':
+                old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
+                return new_ordering, old_to_new_np_array
+            elif STRATEGY == 'GCD':
+                old_to_new_np_array = np.arange(len(old_to_new), dtype=old_ordering.dtype)
+                return old_ordering.T, old_to_new_np_array
+            else:
+                raise NotImplementedError()
+        else:
+            # DOF Mapping
+            if STRATEGY == 'SCPT':
+                return new_ordering
+            elif STRATEGY == 'GCD':
+                return old_ordering.T
+            else:
+                raise NotImplementedError()
 
     def make_dofs_per_plex_entity(self, entity_dofs):
         """Returns the number of DoFs per plex entity for each stratum,
