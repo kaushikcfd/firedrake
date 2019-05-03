@@ -614,4 +614,4 @@ def get_shared_data(mesh, finat_element, real_tensorproduct=False, should_reorde
     if not isinstance(finat_element, finat.finiteelementbase.FiniteElementBase):
         raise ValueError("Can't create function space data from a %s" %
                          type(finat_element))
-    return FunctionSpaceData(mesh, finat_element, real_tensorproduct=real_tensorproduct)
+    return FunctionSpaceData(mesh, finat_element, real_tensorproduct=real_tensorproduct, should_reorder=should_reorder)

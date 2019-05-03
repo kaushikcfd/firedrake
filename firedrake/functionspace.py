@@ -175,7 +175,7 @@ def VectorFunctionSpace(mesh, family, degree=None, dim=None,
     sub_element = make_scalar_element(mesh, family, degree, vfamily, vdegree)
     dim = dim or mesh.ufl_cell().geometric_dimension()
     element = ufl.VectorElement(sub_element, dim=dim)
-    return FunctionSpace(mesh, element, name=name, should_reorder=True)
+    return FunctionSpace(mesh, element, name=name, should_reorder=should_reorder)
 
 
 def TensorFunctionSpace(mesh, family, degree=None, shape=None,

@@ -638,7 +638,7 @@ class MeshTopology(object):
         """
         return tuple(np.dot(nodes_per_entity, self._entity_classes))
 
-    def make_cell_node_list(self, global_numbering, entity_dofs, offsets):
+    def make_cell_node_list(self, global_numbering, entity_dofs, offsets, should_reorder=True):
         """Builds the DoF mapping.
 
         :arg global_numbering: Section describing the global DoF numbering
