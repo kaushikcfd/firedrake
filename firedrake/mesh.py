@@ -643,9 +643,6 @@ class MeshTopology(object):
         old_ordering = dmplex.get_cell_nodes(self, global_numbering,
                                      entity_dofs, offsets)
 
-        print("CAUTION: Not doing any fata layout transformations.")
-        return old_ordering
-
         new_ordering = np.empty_like(old_ordering)
         ncells, ndofs = old_ordering.shape
 
@@ -658,7 +655,7 @@ class MeshTopology(object):
         old_to_new = {}
         counter = 0
 
-        STRATEGY = 'SCPT'
+        STRATEGY = 'GCD'
         print("CAUTION: Data layout adjusted for %s" % STRATEGY)
 
         for ibatch in range(nbatches):
