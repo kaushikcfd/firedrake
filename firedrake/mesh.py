@@ -646,9 +646,7 @@ class MeshTopology(object):
         new_ordering = np.empty_like(old_ordering)
         ncells, ndofs = old_ordering.shape
 
-        # FIXME: Generalize this.
-        # But how?
-        batch_size = 4
+        batch_size = 32
         assert ncells % batch_size == 0
         nbatches = ncells // batch_size
 
@@ -675,8 +673,10 @@ class MeshTopology(object):
         if not should_reorder:
             # Coordinate mapping
             if STRATEGY == 'SCPT':
-                old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
-                return new_ordering, old_to_new_np_array
+                old_to_new_np_array = np.arange(len(old_to_new), dtype=old_ordering.dtype)
+                return old_ordering.T, old_to_new_np_array
+                # old_to_new_np_array = np.array([old_to_new[i] for i in range(len(old_to_new))], dtype=old_ordering.dtype)
+                # return new_ordering, old_to_new_np_array
             elif STRATEGY == 'GCD':
                 old_to_new_np_array = np.arange(len(old_to_new), dtype=old_ordering.dtype)
                 return old_ordering.T, old_to_new_np_array
